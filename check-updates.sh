@@ -178,6 +178,25 @@ print_result() {
     fi
 }
 
+print_result_no_compare() {
+    NAME="$1"
+    INSTALLED="$2"
+    LATEST="$3"
+    NOTE="$4"
+
+    printf '%s\n' ""
+    printf '%s\n' "[$NAME]"
+    printf '  当前版本: %s\n' "${INSTALLED:-not installed}"
+    printf '  最新版本: %s\n' "${LATEST:-unknown}"
+
+    if [ -z "${INSTALLED:-}" ]; then
+        printf '%s\n' "  状态: 未安装"
+    else
+        printf '%s\n' "  状态: 已安装，版本仅供参考"
+    fi
+    [ -z "${NOTE:-}" ] || printf '  说明: %s\n' "$NOTE"
+}
+
 get_installed_opkg_version() {
     PKG="$1"
     opkg status "$PKG" 2>/dev/null | sed -n 's/^Version: //p' | head -n1 || true
@@ -196,6 +215,11 @@ get_installed_apk_version() {
     done
 
     printf ''
+}
+
+get_mosdns_runtime_version() {
+    command -v mosdns >/dev/null 2>&1 || return 0
+    mosdns version 2>/dev/null | sed -n 's/.*\(v[0-9][0-9A-Za-z._-]*\).*/\1/p' | head -n1 || true
 }
 
 check_openclash() {
@@ -235,18 +259,19 @@ check_smartdns() {
     if [ "$PKG_MGR" = "opkg" ]; then
         INSTALLED="$(get_installed_opkg_version smartdns)"
     else
-        INSTALLED="$(get_installed_apk_version luci-app-smartdns smartdns)"
+        INSTALLED="$(get_installed_apk_version smartdns luci-app-smartdns)"
     fi
 
     LATEST="$(fetch_latest_tag_jsonfilter smartdns "$SMARTDNS_API" || true)"
-    print_result "SmartDNS" "$INSTALLED" "$LATEST"
+    print_result_no_compare "SmartDNS" "$INSTALLED" "$LATEST" "SmartDNS 软件包版本与 GitHub Release 标签不是同一套版本号，不直接判断是否可更新"
 }
 
 check_mosdns() {
-    if [ "$PKG_MGR" = "opkg" ]; then
+    INSTALLED="$(get_mosdns_runtime_version)"
+    if [ -z "${INSTALLED:-}" ] && [ "$PKG_MGR" = "opkg" ]; then
         INSTALLED="$(get_installed_opkg_version mosdns)"
     else
-        INSTALLED="$(get_installed_apk_version luci-app-mosdns mosdns)"
+        [ -n "${INSTALLED:-}" ] || INSTALLED="$(get_installed_apk_version mosdns luci-app-mosdns)"
     fi
 
     LATEST="$(fetch_latest_tag_jsonfilter mosdns "$MOSDNS_API" || true)"

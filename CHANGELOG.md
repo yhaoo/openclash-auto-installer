@@ -4,6 +4,7 @@
 
 - 修复 `check-updates.sh` 在 OpenWrt 25.12+ / `apk` 环境下误判已安装插件为 `not installed` 的问题：改用 `apk info -e` 判断安装状态，并依次从 `apk list --installed --manifest`、`apk list --installed`、`apk info -v/-a` 读取版本。
 - SmartDNS / MosDNS / Nikki 检测增加 LuCI 包与核心包的候选包名兜底，避免 LuCI 菜单已存在但版本检测为空。
+- MosDNS 优先读取 `mosdns version`，避免把 `luci-app-mosdns` 的界面包版本误当成 MosDNS 核心版本；SmartDNS 避免把软件包版本和 GitHub Release 标签直接比较。
 
 ## v1.2.2
 
