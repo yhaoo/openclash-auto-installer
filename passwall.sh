@@ -120,6 +120,64 @@ download_pkg_from_dir() {
     printf '%s\n' "$output"
 }
 
+github_release_prefix() {
+    case "$PKG_MGR:$SUPPORTED_RELEASE" in
+        apk:*) printf '25.12%%2B_' ;;
+        opkg:24.10|opkg:23.05) printf '23.05-24.10_' ;;
+        opkg:22.03) printf '22.03-_' ;;
+        *) printf '' ;;
+    esac
+}
+
+find_github_pkg_url() {
+    pkg="$1"
+    ext="$2"
+    prefix="$(github_release_prefix)"
+    [ -n "$prefix" ] || return 1
+    printf '%s\n' "$GH_RELEASE_JSON" \
+        | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)".*/\1/p' \
+        | grep "/${prefix}[^/]*${pkg}[^/]*\.${ext}$" \
+        | head -n1
+}
+
+download_pkg_from_github_release() {
+    pkg="$1"
+    ext="$2"
+    url="$(find_github_pkg_url "$pkg" "$ext")"
+    [ -n "$url" ] || {
+        warn "GitHub release assets 中未找到包: $pkg"
+        return 1
+    }
+
+    filename="$(basename "$url" | sed 's/%2B/+/g')"
+    output="/tmp/$filename"
+    register_tmp "$output"
+
+    log "下载: $filename" >&2
+    download_file "$url" "$output" || download_file "https://gh-proxy.com/$url" "$output" || {
+            warn "下载失败: $url"
+            return 1
+        }
+    [ -s "$output" ] || {
+        warn "下载文件为空: $output"
+        return 1
+    }
+    printf '%s\n' "$output"
+}
+
+download_passwall_pkg() {
+    pkg="$1"
+    dir="$2"
+    ext="$3"
+
+    if [ -n "${GH_RELEASE_JSON:-}" ]; then
+        download_pkg_from_github_release "$pkg" "$ext" && return 0
+        warn "GitHub release assets 下载失败，回退 SourceForge 目录。"
+    fi
+
+    download_pkg_from_dir "$pkg" "$dir" "$ext"
+}
+
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
     die "已有另一个 PassWall 任务正在运行"
 fi
@@ -185,7 +243,8 @@ if [ "$PKG_MGR" = "apk" ]; then
     warn "检测到 OpenWrt 25.12+ apk 环境，将尝试安装上游 .apk 包；若上游尚未发布当前架构构建，会明确失败。"
 fi
 
-GH_LATEST="$(fetch_text "$GH_API" 2>/dev/null | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
+GH_RELEASE_JSON="$(fetch_text "$GH_API" 2>/dev/null || true)"
+GH_LATEST="$(printf '%s' "$GH_RELEASE_JSON" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)"
 [ -n "$GH_LATEST" ] && log "GitHub latest release: $GH_LATEST"
 
 case "$PKG_MGR" in
@@ -261,8 +320,8 @@ if [ "$PKG_MGR" = "opkg" ] && ! opkg list-installed lyaml 2>/dev/null | grep -q 
     opkg install lyaml || install_lyaml_fallback || die "安装依赖 lyaml 失败。请检查系统软件源是否启用 packages 源，或手动执行: opkg update && opkg install lyaml"
 fi
 
-MAIN_PKG="$(download_pkg_from_dir luci-app-passwall passwall_luci "$PKG_EXT")" || die "下载 luci-app-passwall ${PKG_EXT} 失败，请检查当前系统版本/架构是否存在对应构建，或稍后重试。"
-LANG_PKG="$(download_pkg_from_dir luci-i18n-passwall-zh-cn passwall_luci "$PKG_EXT")" || die "下载 luci-i18n-passwall-zh-cn ${PKG_EXT} 失败，请稍后重试。"
+MAIN_PKG="$(download_passwall_pkg luci-app-passwall passwall_luci "$PKG_EXT")" || die "下载 luci-app-passwall ${PKG_EXT} 失败，请检查当前系统版本/架构是否存在对应构建，或稍后重试。"
+LANG_PKG="$(download_passwall_pkg luci-i18n-passwall-zh-cn passwall_luci "$PKG_EXT")" || die "下载 luci-i18n-passwall-zh-cn ${PKG_EXT} 失败，请稍后重试。"
 
 case "$PKG_MGR" in
     opkg)

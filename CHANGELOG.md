@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 修复 PassWall 安装 / 更新时只从 SourceForge 目录抓包导致无法安装 GitHub 最新 release 的问题；`passwall.sh` 现在优先匹配 GitHub release assets（如 `26.5.20-1` 的 `23.05-24.10_*` / `25.12+_*` 包），下载时带 `gh-proxy.com` 兜底，失败后再回退 SourceForge 目录。
+
 ## v1.2.4
 
 - 修复 `check-updates.sh` 在 OpenWrt 25.12+ / `apk` 环境下版本读取不完整的问题：依次从 `apk list --installed --manifest`、`apk list --installed`、`apk info -v/-a` 读取版本。
